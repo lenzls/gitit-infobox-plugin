@@ -79,45 +79,67 @@ serializeRowToHTML :: TableRowData -> String
 serializeRowToHTML (HeadingRowData label) = "<tr><th class=\"heading\" colspan=\"2\">" ++ label ++ "</th></tr>\n"
 serializeRowToHTML (FieldRowData label value) = "<tr><th>" ++ label ++ "</th><td>" ++ value ++ "</td></tr>\n"
 
+serializeRowsToTableBodies :: [TableRowData] -> [TableBody]
+serializeRowsToTableBodies [] = []
+serializeRowsToTableBodies (x:xs) = serializeRowToTableBodies x (serializeRowsToTableBodies xs)
+
+serializeRowToTableBodies :: TableRowData -> [TableBody] -> [TableBody]
+serializeRowToTableBodies (HeadingRowData label) result = result ++ [
+        (
+            TableBody
+                nullAttr
+                (RowHeadColumns 1)
+                [
+                    Row nullAttr [
+                        Cell nullAttr AlignCenter (RowSpan 1) (ColSpan 2) [Plain [((Str . pack) label)]]
+                    ]
+                ]
+                []
+        )
+    ]
+serializeRowToTableBodies (FieldRowData label value) result = (init result) ++ [
+        (
+            addBodyRow
+                (last result)
+                (
+                    Row nullAttr [
+                        Cell nullAttr AlignLeft (RowSpan 1) (ColSpan 1) [Plain [((Str . pack) label)]],
+                        Cell nullAttr AlignLeft (RowSpan 1) (ColSpan 1) [Para [(Str (pack value))]]
+                    ]
+                )
+        )
+    ]
+
+addBodyRow :: TableBody -> Row -> TableBody
+addBodyRow (TableBody attr rhc headRows bodyRows) row = TableBody attr rhc headRows (bodyRows ++ [row])
+
+serializeToBlock :: InfoBoxData -> Block
+serializeToBlock infoBoxData =
+    Div ("", ["info-box"], []) [
+        Header 2 nullAttr [(Str . pack) (title infoBoxData)],
+        SimpleFigure 
+            nullAttr
+            [Str (pack (maybe "" (\x -> x) (imageCaption infoBoxData)))]
+            (
+                pack (maybe "" (\x -> x) (imageURL infoBoxData)),
+                ""
+            ),
+        Table
+            nullAttr
+            (Caption Nothing [])
+            [(AlignLeft,ColWidthDefault), (AlignLeft,ColWidthDefault)]
+            (TableHead nullAttr [])
+            (serializeRowsToTableBodies (reverse (tableRows infoBoxData)))
+            (TableFoot nullAttr [])
+    ]
+
 plugin :: Plugin
 plugin = mkPageTransform transformBlock
 
-    -- return $ Table
-    --     ("ttable", [], [])
-    --     (Caption (Just [(Str "some caption")]) [])
-    --     [(AlignLeft,ColWidth 20), (AlignLeft,ColWidthDefault)]
-    --     (TableHead ("thead", [], []) [
-    --         Row ("theadrow1", [], []) [
-    --             Cell ("theadcell1", [], []) AlignLeft (RowSpan 1) (ColSpan 1) [Plain [(Str "Header col 1")]]
-    --         ]
-    --     ])
-    --     [TableBody ("tbody1", [], []) (RowHeadColumns 0) [
-    --         Row ("trow1.1", [], []) [
-    --             Cell ("tcell1.1a", [], []) AlignLeft (RowSpan 1) (ColSpan 1) [Plain [(Str "content cell1.1a"), (Str "2nd content cell1.1")]]
-    --         ],
-    --         Row ("trow1.2", [], []) [
-    --             Cell ("tcell1.2a", [], []) AlignLeft (RowSpan 1) (ColSpan 1) [Plain [(Str "content cell1.2a")]],
-    --             Cell ("tcell1.2b", [], []) AlignLeft (RowSpan 1) (ColSpan 1) [Plain [(Str "content cell1.2b")]]
-    --         ],
-    --         Row ("trow1.3", [], []) [
-    --             Cell ("tcell1.3a", [], []) AlignLeft (RowSpan 1) (ColSpan 1) [Plain [(Str "content cell1.3a")]],
-    --             Cell ("tcell1.3b", [], []) AlignLeft (RowSpan 1) (ColSpan 1) [Plain [(Str "content cell1.3b")]]
-    --         ]
-    --     ] [
-    --         Row ("trow2.1", [], []) [
-    --             Cell ("tcell2.1a", [], []) AlignLeft (RowSpan 1) (ColSpan 1) [Plain [(Str "content cell2.1a")]],
-    --             Cell ("tcell2.1b", [], []) AlignLeft (RowSpan 1) (ColSpan 1) [Plain [(Str "content cell2.1b")]]
-    --         ],
-    --         Row ("trow2.2", [], []) [
-    --             Cell ("tcell2.2a", [], []) AlignLeft (RowSpan 1) (ColSpan 1) [Plain [(Str "content cell2.2a")]],
-    --             Cell ("tcell2.2b", [], []) AlignLeft (RowSpan 1) (ColSpan 1) [Plain [(Str "content cell2.2b")]]
-    --         ]
-    --     ]]
-    --     (TableFoot ("tfoot", [], []) [])
 transformBlock :: Block -> Block
 transformBlock (CodeBlock (_, classes, namevals) contents) | "infobox" `elem` classes =
     traceShow parsed
-    serializeToHTML parsed
+    serializeToBlock parsed
     where
         parsed = (parse (unpack contents))
 transformBlock x = x
